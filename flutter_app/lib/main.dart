@@ -133,11 +133,34 @@ class _ChatScreenState extends State<ChatScreen> {
     jumpBottom();
 
     try {
-      // Clean common copy/paste characters from the GitHub Actions variable.
-      final cleanBase = apiBaseUrl
-          .replaceAll(RegExp(r'[\\uFEFF\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]'), '')
-          .trim()
-          .replaceAll(RegExp(r'''^["']|["']
+      // Normalize the backend URL before building the chat endpoint.
+      var cleanBase = apiBaseUrl.trim();
+      cleanBase = cleanBase
+          .replaceAll('\uFEFF', '')
+          .replaceAll('\u200E', '')
+          .replaceAll('\u200F', '')
+          .trim();
+      if (cleanBase.startsWith('"') && cleanBase.endsWith('"')) {
+        cleanBase = cleanBase.substring(1, cleanBase.length - 1).trim();
+      }
+      if (cleanBase.startsWith("'") && cleanBase.endsWith("'")) {
+        cleanBase = cleanBase.substring(1, cleanBase.length - 1).trim();
+      }
+      cleanBase = cleanBase.replaceAll(RegExp(r'/+$'), '');
+      final baseUri = Uri.tryParse(cleanBase);
+      if (baseUri == null ||
+          !baseUri.hasScheme ||
+          !['https', 'http'].contains(baseUri.scheme.toLowerCase()) ||
+          baseUri.host.isEmpty) {
+        throw const FormatException(
+          'رابط الخادم غير صالح. تحقق من API_BASE_URL في GitHub Actions.',
+        );
+      }
+      final endpoint = Uri.parse('$cleanBase/api/chat');
+      final response = await http
+          .post(
+            endpoint,
+            headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'model': model,
               'messages': messages.map((m) => m.toJson()).toList(),
